@@ -1,3 +1,4 @@
+import logging
 from datetime import date, timedelta, datetime
 import random
 from sqlalchemy.orm import Session
@@ -7,18 +8,32 @@ from auth import hash_password
 from irrigation_engine import calculate_et0, calculate_etc, get_ra_by_month, get_effective_rainfall, get_flow_rate, calculate_water_fee
 from config import settings
 
+logger = logging.getLogger(__name__)
+
 
 def init_db():
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:
-        _init_users(db)
-        _init_plots(db)
-        _init_weather_data(db)
-        _init_irrigation_records(db)
-        _init_water_usage(db)
-        _generate_irrigation_suggestions(db)
-        print("Database initialization completed!")
+        steps = [
+            ("users", _init_users),
+            ("plots", _init_plots),
+            ("weather_data", _init_weather_data),
+            ("irrigation_records", _init_irrigation_records),
+            ("water_usage", _init_water_usage),
+            ("irrigation_suggestions", _generate_irrigation_suggestions),
+        ]
+        for name, func in steps:
+            try:
+                func(db)
+                logger.info(f"Init step '{name}' completed")
+            except Exception as e:
+                logger.error(f"Init step '{name}' failed: {e}")
+                db.rollback()
+        logger.info("Database initialization completed!")
+    except Exception as e:
+        logger.error(f"Database initialization error: {e}")
+        db.rollback()
     finally:
         db.close()
 
